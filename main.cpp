@@ -5,12 +5,32 @@
 
 class Date {
 public:
-  int GetYear() const;
-  int GetMonth() const;
-  int GetDay() const;
+    int GetYear() const {
+        return year;
+    }
+    int GetMonth() const {
+        return month;
+    }
+    int GetDay() const {
+        return day;
+    }
+    Date(int year, int month, int day) : year(year), month(month), day(day) {}
+private:
+  int year;
+  int month;
+  int day;
 };
 
-bool operator<(const Date& lhs, const Date& rhs);
+bool operator<(const Date& lhs, const Date& rhs) {
+    if (lhs.GetYear() == rhs.GetYear()) {
+        if (lhs.GetMonth() == rhs.GetMonth()) {
+            return lhs.GetDay() < rhs.GetDay();
+        } else {
+            return lhs.GetMonth() < rhs.GetMonth();
+        }
+    }
+    return lhs.GetYear() < rhs.GetYear();
+}
 
 class Database {
 public:
