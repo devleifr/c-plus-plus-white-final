@@ -1,11 +1,11 @@
 #include <exception>
 #include <iomanip>
 #include <iostream>
-#include <vector>
+#include <map>
 #include <set>
+#include <sstream>
 #include <string>
-
-// Реализуйте функции и методы классов и при необходимости добавьте свои
+#include <vector>
 
 class Date {
 public:
@@ -18,8 +18,18 @@ public:
     int GetDay() const {
         return day_;
     }
+    explicit Date() : year_(0), month_(1), day_(1) {}
     explicit Date(int year, int month, int day)
-        : year_(year), month_(month), day_(day) {}
+        : year_(year), month_(month), day_(day) {
+        if (month < 1 || month > 12) {
+            throw std::domain_error("Month value is invalid: " +
+                                    std::to_string(month));
+        }
+        if (day < 1 || day > 31) {
+            throw std::domain_error("Day value is invalid: " +
+                                    std::to_string(day));
+        }
+    }
 private:
   int year_;
   int month_;
@@ -43,81 +53,121 @@ bool operator<(const Date& lhs, const Date& rhs) {
     return lhs.GetYear() < rhs.GetYear();
 }
 
-class Event {
-public:
-    std::string GetType() const {
-        return type_;
+Date toDate(const std::string& date_string, const char delim)
+{
+    std::istringstream ss(date_string);
+    bool isDate= true;
+    int year, month, day;
+    isDate = isDate && (ss >> year);
+    isDate = isDate && (ss.peek() == delim);
+    ss.ignore(1);
+    isDate = isDate && (ss >> month);
+    isDate = isDate && (ss.peek() == delim);
+    ss.ignore(1);
+    isDate = isDate && (ss >> day);
+    isDate = isDate && ss.eof();
+    if (!isDate)
+    {
+        throw std::invalid_argument("Wrong date format: " + date_string);
     }
-    Date GetDate() const {
-        return date_;
-    }
-    explicit Event(const std::string& type, const Date& date)
-        : type_(type), date_(date) {}
-private:
-    std::string type_;
-    Date date_;
-};
-
-bool operator<(const Event& lhs, const Event& rhs) {
-    if (lhs.GetDate() == rhs.GetDate()) {
-        return lhs.GetType() < rhs.GetType();
-    }
-    return lhs.GetDate() < rhs.GetDate();
+    return Date{year, month, day};
 }
 
+std::istream& operator>> (std::istream& in, Date& date) {
+    std::string date_string;
+    in >> date_string;
+    date = toDate(date_string, '-');
+    return in;
+}
+
+std::ostream& operator<< (std::ostream& out, const Date& date) {
+    std::cout << std::setfill('0');
+    std::cout << std::setw(4) << date.GetYear() << '-'
+              << std::setw(2) << date.GetMonth() << '-'
+              << std::setw(2) << date.GetDay();
+    return out;
+}
 
 class Database {
 public:
     void AddEvent(const Date& date, const std::string& event) {
-        if (date.GetMonth() < 1 || date.GetMonth() > 12) {
-            throw std::invalid_argument(std::to_string(date.GetMonth()));
-        }
-        if (date.GetDay() < 1 || date.GetDay() > 31) {
-            throw std::invalid_argument(std::to_string(date.GetDay()));
-        }
-        events.insert(Event{event, date});
+        events[date].insert(event);
     }
     bool DeleteEvent(const Date& date, const std::string& event) {
-        return events.erase(Event(event, date));
+        return events[date].erase(event);
     }
     int  DeleteDate(const Date& date) {
-        return std::erase_if(events, [date](const Event& e) -> bool {
-            return e.GetDate() == date;
-        });
-    }
-    std::vector<std::string> Find(const Date& date) const {
-        std::vector<std::string> event_types;
-        for (const auto& ev : events) {
-            if (ev.GetDate() == date) event_types.push_back(ev.GetType());
+        size_t deleted_count = 0;
+        if (events.count(date)) {
+            deleted_count = events[date].size();
+            events.erase(date);
         }
-        return event_types;
+        return static_cast<int>(deleted_count);
+    }
+    std::set<std::string> Find(const Date& date) const {
+        std::set<std::string> result;
+        auto it = events.find(date);
+        if (it != events.end()) {
+            result = it->second;
+        }
+        return result;
     }
     void Print() const {
-        std::cout << std::setfill('0');
-        for (const auto& ev : events) {
-            Date date = ev.GetDate();
-            std::cout << std::setw(4) << date.GetYear() << '.'
-                      << std::setw(2) << date.GetMonth() << '.'
-                      << std::setw(2) << date.GetDay() << ' '
-                      << ev.GetType() << std::endl;
+        for (const auto& [date, names] : events) {
+            for (const auto& name : names) {
+                std::cout << date << " "
+                          << name << std::endl;
+            }
         }
     }
 private:
-    std::set<Event> events;
+    std::map<Date, std::set<std::string> > events;
 };
 
 int main() {
-  Database db;
+    try {
+        Database db;
 
-  std::string command;
-  while (getline(std::cin, command)) {
-      try {
-
-      }  catch () {
-
-      }
-    // Считайте команды с потока ввода и обработайте каждую
-  }
-
-  return 0;
+        std::string query;
+        while (getline(std::cin, query)) {
+            // Считайте команды с потока ввода и обработайте каждую
+            std::string command, event;
+            Date date;
+            if (query.empty()) continue;
+            std::istringstream ss(query);
+            ss >> command;
+            if (command == "Add") {
+                ss >> date >> event;
+                db.AddEvent(date, event);
+            } else if (command == "Del") {
+                ss >> date >> event;
+                if (!event.empty()) {
+                    bool isDeleted = db.DeleteEvent(date, event);
+                    if (isDeleted) {
+                        std::cout << "Deleted successfully" << std::endl;
+                    } else {
+                        std::cout << "Event not found" << std::endl;
+                    }
+                } else {
+                    int deleted_count = db.DeleteDate(date);
+                    std::cout << "Deleted " << deleted_count << " events"
+                              << std::endl;
+                }
+            } else if (command == "Find") {
+                ss >> date;
+                for (const auto& event : db.Find(date)) {
+                    std::cout << event << std::endl;
+                }
+            } else if (command == "Print") {
+                db.Print();
+            } else {
+                std::cout << "Unknown command: " << command << std::endl;
+            }
+        }
+    } catch (const std::invalid_argument& e) {
+        std::cout << e.what() << std::endl;
+    } catch (const std::domain_error& e) {
+        std::cout << e.what() << std::endl;
+    }
+    return 0;
 }
